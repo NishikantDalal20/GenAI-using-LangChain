@@ -24,6 +24,8 @@ langchain-huggingface
 transformers
 huggingface-hub
 
+langchain_classic
+
 # Environment Variable Management
 python-dotenv
 
