@@ -509,3 +509,209 @@ The agent immediately calls the calculator.
 - **Not supported:** TinyLlama, many Hugging Face models — need **Output Parsers** (covered in the next lesson).
 
 ---
+
+## 📚 Lecture 5 — LangChain Output Parsers
+
+
+
+### 1. What are Output Parsers?
+> Output Parsers in LangChain convert raw LLM textual responses into structured formats like JSON, CSV, Pydantic models, etc.
+
+**Benefits:** convert text → structured data · consistent output · validation support · easy integration with applications.
+
+### 2. Four Important Output Parsers
+1. **StrOutputParser** — returns only the string content
+2. **JsonOutputParser** — returns a JSON dictionary
+3. **StructuredOutputParser** — enforces a JSON schema
+4. **PydanticOutputParser** — schema + validation
+
+---
+
+### 3. StrOutputParser
+The simplest output parser — extracts only the text from the LLM response.
+
+**Without parser:**
+```python
+result = model.invoke(prompt)
+print(result.content)
+```
+**With parser:**
+```python
+parser = StrOutputParser()
+chain = prompt | model | parser
+result = chain.invoke({"topic": "Black Hole"})
+```
+
+**Why use it?** `model.invoke()` normally returns content + token usage + metadata + response id + finish reason. `StrOutputParser` strips everything except the text.
+
+**Chain syntax (multi-step):**
+```python
+parser = StrOutputParser()
+chain = template1 | model | parser | template2 | model | parser
+result = chain.invoke({"topic": "Black Hole"})
+```
+
+**Best for:** chatbots, summarization, translation, multi-step chains.
+
+---
+
+### 4. JsonOutputParser
+Forces the LLM to return JSON output.
+
+```python
+from langchain_core.output_parsers import JsonOutputParser
+parser = JsonOutputParser()
+
+template = PromptTemplate(
+    template="""
+    Give me the name, age and city of a fictional person.
+    {format_instructions}
+    """,
+    partial_variables={"format_instructions": parser.get_format_instructions()}
+)
+```
+
+**Why `get_format_instructions()`?** It automatically adds instructions like *"Return a JSON object"* so the LLM knows the expected format.
+
+**Complete flow:**
+```python
+prompt = template.format()
+result = model.invoke(prompt)
+final = parser.parse(result.content)
+```
+**Output:** `{"name": "John", "age": 28, "city": "London"}` — Python type: `dict`.
+
+**Chain version:**
+```python
+chain = template | model | parser
+result = chain.invoke({})
+```
+
+**Limitation:** gives JSON, but does **not enforce a schema**. E.g. it might return `{"facts": ["...", "...", "..."]}` when you wanted `{"fact1": "...", "fact2": "...", "fact3": "..."}` — JsonOutputParser can't guarantee this exact structure.
+
+---
+
+### 5. StructuredOutputParser
+Returns JSON according to a **predefined schema**.
+
+| JSON Parser | Structured Parser |
+|---|---|
+| JSON only | JSON + Schema |
+| No fixed keys | Fixed keys |
+| Flexible | Controlled |
+
+**Step 1 — Create response schema(s):**
+```python
+schemas = [
+    ResponseSchema(name="fact1", description="First fact"),
+    ResponseSchema(name="fact2", description="..."),
+    ResponseSchema(name="fact3", description="...")
+]
+```
+
+**Step 2 — Create parser:**
+```python
+parser = StructuredOutputParser.from_response_schemas(schemas)
+```
+
+**Step 3 — Prompt:**
+```python
+template = PromptTemplate(
+    template="""
+    Give 3 facts.
+    {format_instructions}
+    """,
+    partial_variables={"format_instructions": parser.get_format_instructions()}
+)
+```
+
+**Output:** `{"fact1": "....", "fact2": "....", "fact3": "...."}` — exactly follows the schema.
+
+**Chain:**
+```python
+chain = template | model | parser
+result = chain.invoke({"topic": "Black Hole"})
+```
+
+**Limitation:** schema (keys) is enforced, but **data validation is not**. E.g. if `age` should be `int` but the LLM returns `{"age": "35 years"}`, this parser accepts it anyway.
+
+---
+
+### 6. PydanticOutputParser
+Uses Pydantic models to enforce **schema + data type + validation**. This is the **most powerful** parser discussed.
+
+```python
+from pydantic import BaseModel, Field
+from langchain_core.output_parsers import PydanticOutputParser
+```
+
+**Step 1 — Create Pydantic model:**
+```python
+class Person(BaseModel):
+    name: str = Field(description="Person name")
+    age: int = Field(gt=18, description="Age")
+    city: str = Field(description="City")
+```
+`gt=18` means: age must be greater than 18.
+
+**Step 2 — Parser:**
+```python
+parser = PydanticOutputParser(pydantic_object=Person)
+```
+
+**Step 3 — Prompt:**
+```python
+template = PromptTemplate(
+    template="""
+    Generate name, age and city.
+    {format_instructions}
+    """,
+    partial_variables={"format_instructions": parser.get_format_instructions()}
+)
+```
+
+**Output:** `Person(name='Rahul', age=24, city='Delhi')` — **not** a dictionary, a Pydantic object.
+
+**Chain:**
+```python
+chain = template | model | parser
+result = chain.invoke({"place": "Indian"})
+```
+
+---
+
+### 7. Why Partial Variables?
+Used for values that don't change at runtime — e.g. `format_instructions` (from the parser) is combined with runtime input (e.g. `topic = "Black Hole"`) into a single prompt.
+```python
+partial_variables={"format_instructions": parser.get_format_instructions()}
+```
+
+### 8. Chain Pipeline (General Syntax)
+```
+User Input → PromptTemplate (+ format instructions) → LLM Model (GPT/Gemini/Llama) → Output Parser (String/JSON/Structured/Pydantic) → Structured Output (JSON/Object)
+```
+```python
+chain = prompt | model | parser
+result = chain.invoke(input)
+```
+This `prompt | model | parser` syntax is the preferred LangChain style.
+
+---
+
+### 9. Comparison Table (Most Important)
+| Feature | Str | JSON | Structured | Pydantic |
+|---|---|---|---|---|
+| Output type | String | JSON | JSON | Pydantic Object |
+| Removes metadata | ✅ | ✅ | ✅ | ✅ |
+| JSON format | ❌ | ✅ | ✅ | ✅ |
+| Schema enforcement | ❌ | ❌ | ✅ | ✅ |
+| Data validation | ❌ | ❌ | ❌ | ✅ |
+| Best for | Text | JSON | Fixed JSON | Production Apps |
+
+### 10. Which Parser Should You Use?
+- Need plain text? → **StrOutputParser**
+- Need JSON only? → **JsonOutputParser**
+- Need fixed keys in JSON? → **StructuredOutputParser**
+- Need schema + validation + production-ready output? → **PydanticOutputParser**
+
+---
