@@ -715,3 +715,514 @@ This `prompt | model | parser` syntax is the preferred LangChain style.
 - Need schema + validation + production-ready output? → **PydanticOutputParser**
 
 ---
+## 📚 Lecture 6 — LangChain Chains
+
+### 1. What is a Chain?
+
+A **Chain** is a pipeline that connects multiple LangChain components together.
+
+```text
+Input → Prompt → LLM → Parser → Output
+```
+
+The output of one component becomes the input of the next component.
+
+Example:
+```python
+chain = prompt | model | parser
+```
+
+---
+
+### 2. Why Chains?
+
+Without Chains, each component must be invoked separately.
+
+With Chains, the complete workflow can be executed using:
+
+```python
+result = chain.invoke(input)
+```
+
+#### Advantages
+
+- Connects multiple components.
+- Automates execution.
+- Reduces manual code.
+- Makes workflows easier to understand.
+- Supports sequential, parallel, and conditional execution.
+
+---
+
+### 3. LCEL
+
+The syntax used to connect LangChain components with the pipe operator is called:
+
+> **LangChain Expression Language (LCEL)**
+
+Example:
+```python
+chain = prompt | model | parser
+```
+
+Flow:
+
+```text
+Prompt
+  ↓
+Model
+  ↓
+Parser
+  ↓
+Output
+```
+
+LCEL is closely related to **Runnables**.
+
+---
+
+### 4. Invoking a Chain
+
+Use `invoke()` to execute a Chain.
+
+```python
+result = chain.invoke({
+    "topic": "cricket"
+})
+
+print(result)
+```
+
+To visualize the Chain:
+
+```python
+chain.get_graph().print_ascii()
+```
+
+---
+
+### 5. Types of Chains
+
+There are three important execution patterns:
+
+```text
+Sequential
+Parallel
+Conditional
+```
+
+---
+
+#### 6. Sequential Chain
+
+A Sequential Chain executes steps **one after another**.
+
+```text
+A → B → C → D
+```
+
+The output of one step becomes the input of the next.
+
+#### Example
+
+```text
+Topic
+ ↓
+Detailed Report
+ ↓
+Five Point Summary
+```
+
+#### Code
+
+```python
+prompt1 = PromptTemplate(
+    template="Generate a detailed report on {topic}",
+    input_variables=["topic"]
+)
+
+prompt2 = PromptTemplate(
+    template="Generate a five pointer summary from:\n{text}",
+    input_variables=["text"]
+)
+
+chain = prompt1 | model | parser | prompt2 | model | parser
+```
+
+Invoke:
+
+```python
+result = chain.invoke({
+    "topic": "Unemployment in India"
+})
+```
+
+---
+
+### 7. Parallel Chain
+
+A Parallel Chain executes **independent tasks at the same time**.
+
+```text
+             ┌→ Chain A
+Input ───────┤
+             └→ Chain B
+```
+
+Both Chains receive the same input.
+
+### Example
+
+From a document, generate:
+
+- Notes
+- Quiz
+
+```text
+              ┌→ Notes
+Document ─────┤
+              └→ Quiz
+```
+
+---
+
+## RunnableParallel
+
+`RunnableParallel` is used to execute multiple Runnables/Chains in parallel.
+
+```python
+from langchain_core.runnables import RunnableParallel
+
+notes_chain = notes_prompt | model1 | parser
+quiz_chain = quiz_prompt | model2 | parser
+
+parallel_chain = RunnableParallel({
+    "notes": notes_chain,
+    "quiz": quiz_chain
+})
+```
+
+The output has the structure:
+
+```text
+{
+    "notes": ...,
+    "quiz": ...
+}
+```
+
+---
+
+## Merge Parallel Outputs
+
+The outputs can be passed to another Chain.
+
+```python
+merge_chain = merge_prompt | model | parser
+
+chain = parallel_chain | merge_chain
+```
+
+Flow:
+
+```text
+             ┌→ Notes ──┐
+Input ───────┤           ├→ Merge → Output
+             └→ Quiz ───┘
+```
+
+---
+
+### 8. Conditional Chain
+
+A Conditional Chain selects a path based on a condition.
+
+```text
+Input
+  ↓
+Condition
+ ┌┴──────┐
+ ↓      ↓
+A       B
+```
+
+Only the matching branch executes.
+
+#### Example
+
+Classify user feedback as:
+
+```text
+positive
+negative
+```
+
+Then execute the appropriate Chain.
+
+```text
+Feedback
+   ↓
+Sentiment Classification
+   ↓
+Condition
+  ↙     ↘
+Positive Negative
+  ↓       ↓
+Chain    Chain
+```
+
+---
+
+### 9. Structured Output for Classification
+
+Normal string output may not always be consistent.
+
+For example:
+
+```text
+positive
+```
+
+or:
+
+```text
+The sentiment is positive.
+```
+
+For reliable branching, we can use **PydanticOutputParser**.
+
+```python
+from pydantic import BaseModel, Field
+from typing import Literal
+from langchain_core.output_parsers import PydanticOutputParser
+
+class Feedback(BaseModel):
+    sentiment: Literal["positive", "negative"] = Field(
+        description="Sentiment of the feedback"
+    )
+
+parser2 = PydanticOutputParser(
+    pydantic_object=Feedback
+)
+```
+
+The result can be accessed using:
+
+```python
+result.sentiment
+```
+
+Example:
+
+```python
+result = classification_chain.invoke({
+    "feedback": "This is a wonderful smartphone."
+})
+
+print(result.sentiment)
+```
+
+Output:
+
+```text
+positive
+```
+
+#### Format Instructions
+
+```python
+parser2.get_format_instructions()
+```
+
+These instructions can be passed to the prompt:
+
+```python
+prompt = PromptTemplate(
+    template="""
+    Classify the sentiment of the following feedback:
+
+    {feedback}
+
+    {format_instructions}
+    """,
+    input_variables=["feedback"],
+    partial_variables={
+        "format_instructions": parser2.get_format_instructions()
+    }
+)
+```
+
+Classification Chain:
+
+```python
+classification_chain = prompt | model | parser2
+```
+
+---
+
+#### 10. RunnableBranch
+
+`RunnableBranch` is used for **conditional execution**.
+
+It works similar to:
+
+```python
+if
+elif
+else
+```
+
+#### Syntax
+
+```python
+from langchain_core.runnables import RunnableBranch
+
+branch_chain = RunnableBranch(
+    (condition1, chain1),
+    (condition2, chain2),
+    default_chain
+)
+```
+
+#### Example
+
+```python
+positive_chain = positive_prompt | model | parser
+negative_chain = negative_prompt | model | parser
+
+branch_chain = RunnableBranch(
+    (
+        lambda x: x.sentiment == "positive",
+        positive_chain
+    ),
+    (
+        lambda x: x.sentiment == "negative",
+        negative_chain
+    ),
+    default_chain
+)
+```
+
+The complete workflow:
+
+```python
+chain = classification_chain | branch_chain
+```
+
+---
+
+### 11. RunnableLambda
+
+`RunnableLambda` converts a normal Python function or lambda into a Runnable.
+
+```python
+from langchain_core.runnables import RunnableLambda
+
+default_chain = RunnableLambda(
+    lambda x: "Could not find sentiment"
+)
+```
+
+It is useful for creating custom logic inside a LangChain workflow.
+
+---
+
+### 12. Important LangChain Classes
+
+| Class | Purpose |
+|---|---|
+| `PromptTemplate` | Creates dynamic prompts |
+| `ChatOpenAI` | OpenAI chat model |
+| `ChatAnthropic` | Anthropic chat model |
+| `StrOutputParser` | Converts output to string |
+| `PydanticOutputParser` | Creates structured Pydantic output |
+| `RunnableParallel` | Executes multiple Runnables in parallel |
+| `RunnableBranch` | Performs conditional execution |
+| `RunnableLambda` | Converts Python functions into Runnables |
+
+---
+
+### 13. Important Syntax
+
+#### Simple Chain
+
+```python
+chain = prompt | model | parser
+```
+
+#### Invoke
+
+```python
+chain.invoke(input)
+```
+
+#### Visualize
+
+```python
+chain.get_graph().print_ascii()
+```
+
+#### Sequential
+
+```python
+chain = prompt1 | model | parser | prompt2 | model | parser
+```
+
+#### Parallel
+
+```python
+RunnableParallel({
+    "a": chain1,
+    "b": chain2
+})
+```
+
+#### Conditional
+
+```python
+RunnableBranch(
+    (condition1, chain1),
+    (condition2, chain2),
+    default_chain
+)
+```
+
+#### Runnable Function
+
+```python
+RunnableLambda(lambda x: ...)
+```
+
+---
+
+### 14. Sequential vs Parallel vs Conditional
+
+| Type | Use | Execution |
+|---|---|---|
+| **Sequential** | Dependent tasks | One after another |
+| **Parallel** | Independent tasks | Simultaneously |
+| **Conditional** | Decision-based tasks | Matching branch only |
+
+#### Sequential
+
+```text
+A → B → C
+```
+
+#### Parallel
+
+```text
+       ┌→ B
+A ─────┤
+       └→ C
+```
+
+#### Conditional
+
+```text
+       ┌→ B
+A → Condition
+       └→ C
+```
+
+---
