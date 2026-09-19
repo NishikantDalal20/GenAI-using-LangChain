@@ -1226,3 +1226,656 @@ A → Condition
 ```
 
 ---
+
+# 📚 Lecture 7 — LangChain Runnables - Part 1
+
+## 1. What are Runnables?
+
+A **Runnable** is the fundamental building block of LangChain. It is a **unit of work** that accepts an input, processes it, and returns an output.
+
+```text
+Input → Runnable → Output
+```
+
+Examples of Runnables:
+
+- PromptTemplate
+- Chat Model (LLM)
+- Output Parser
+- Retriever
+- Text Splitter
+
+Each Runnable performs **one specific task**.
+
+---
+
+## 2. Why were Runnables Introduced?
+
+Earlier, LangChain had many independent components for building LLM applications.
+
+```text
+PDF
+ ↓
+Loader
+ ↓
+Text Splitter
+ ↓
+Embeddings
+ ↓
+Vector Database
+ ↓
+Retriever
+ ↓
+LLM
+ ↓
+Output
+```
+
+Every component had a different interface, making workflows difficult to build.
+
+### Problems Before Runnables
+
+- Different method names for different components.
+- Too many specialized Chain classes.
+- Large and difficult codebase.
+- Steep learning curve.
+- Low reusability.
+
+**Solution:** Standardize every component using the Runnable interface.
+
+---
+
+## 3. Runnable Interface
+
+Every Runnable supports the same three methods.
+
+| Method | Purpose |
+|---------|----------|
+| `invoke()` | Execute a single input |
+| `batch()` | Execute multiple inputs |
+| `stream()` | Stream output token-by-token |
+
+### Invoke
+
+```python
+result = runnable.invoke(input)
+```
+
+### Batch
+
+```python
+results = runnable.batch([
+    input1,
+    input2,
+    input3
+])
+```
+
+### Stream
+
+```python
+for chunk in runnable.stream(input):
+    print(chunk)
+```
+
+---
+
+## 4. Standardization
+
+Before Runnables:
+
+| Component | Method |
+|-----------|---------|
+| Prompt | `format()` |
+| LLM | `predict()` |
+| Retriever | `get_relevant_documents()` |
+| Parser | `parse()` |
+
+After Runnables:
+
+| Component | Common Method |
+|-----------|---------------|
+| Prompt | `invoke()` |
+| LLM | `invoke()` |
+| Retriever | `invoke()` |
+| Parser | `invoke()` |
+
+Every component now behaves identically.
+
+---
+
+## 5. Connecting Runnables (LCEL)
+
+Since every component is a Runnable, they can be connected using the **pipe (`|`) operator**.
+
+```python
+chain = prompt | model | parser
+```
+
+Flow:
+
+```text
+Prompt
+  ↓
+Model
+  ↓
+Parser
+  ↓
+Output
+```
+
+The output of one Runnable automatically becomes the input of the next.
+
+---
+
+## 6. Runnable Pipeline
+
+A complete LangChain workflow is simply a collection of connected Runnables.
+
+```text
+User Input
+     ↓
+Prompt Runnable
+     ↓
+LLM Runnable
+     ↓
+Parser Runnable
+     ↓
+Final Output
+```
+
+Execution:
+
+```python
+result = chain.invoke({
+    "topic": "Artificial Intelligence"
+})
+```
+
+---
+
+## 7. Four Properties of Runnables
+
+### 1. Unit of Work
+
+Every Runnable performs one dedicated task.
+
+Examples:
+
+- Prompt generation
+- LLM inference
+- Document retrieval
+- Output parsing
+
+---
+
+### 2. Common Interface
+
+All Runnables provide the same methods.
+
+```python
+invoke()
+batch()
+stream()
+```
+
+No need to remember different APIs.
+
+---
+
+### 3. Composable
+
+Multiple Runnables can be connected together.
+
+```text
+Runnable A
+     ↓
+Runnable B
+     ↓
+Runnable C
+```
+
+Code:
+
+```python
+workflow = runnable1 | runnable2 | runnable3
+```
+
+---
+
+### 4. Workflow is Also a Runnable
+
+A connected workflow itself becomes another Runnable.
+
+```text
+R1 → R2 → R3
+```
+
+becomes
+
+```text
+Workflow (Runnable)
+```
+
+This allows reusable and nested workflows.
+
+---
+
+## 8. Lego Analogy
+
+Runnables behave like LEGO blocks.
+
+- Each block has one purpose.
+- Every block uses the same connector.
+- Blocks connect seamlessly.
+- A connected structure behaves like another LEGO block.
+
+```text
+□ → □ → □
+
+      ↓
+
+ New Runnable
+```
+
+This is the core idea behind LangChain's modular design.
+
+---
+
+## 9. Runnables vs Chains
+
+| Chains | Runnables |
+|---------|-----------|
+| Predefined workflows | Fundamental building blocks |
+| Many specialized classes | One standardized interface |
+| Hard to maintain | Easy to compose |
+| Different implementations | Same API everywhere |
+
+### Old Approach
+
+```python
+formatted_prompt = prompt.format(...)
+
+response = llm.predict(formatted_prompt)
+
+answer = parser.parse(response)
+```
+
+### Runnable Approach
+
+```python
+chain = prompt | llm | parser
+
+result = chain.invoke(input)
+```
+
+Less code and better readability.
+
+---
+
+## 10. Creating a Runnable (Concept)
+
+A Runnable accepts input and returns output.
+
+```python
+class DummyRunnable:
+
+    def invoke(self, input):
+        return "Processed Output"
+```
+
+Any component implementing `invoke()` becomes compatible with LangChain workflows.
+
+---
+
+## 11. Runnable Methods Summary
+
+| Method | Input | Output |
+|---------|-------|--------|
+| `invoke()` | Single input | Single output |
+| `batch()` | List of inputs | List of outputs |
+| `stream()` | Single input | Streaming output |
+
+---
+
+## 12. Important Runnable Components
+
+| Component | Purpose |
+|-----------|----------|
+| `PromptTemplate` | Create dynamic prompts |
+| `ChatOpenAI` | OpenAI chat model |
+| `ChatAnthropic` | Anthropic chat model |
+| `StrOutputParser` | Convert output to string |
+| `Retriever` | Retrieve relevant documents |
+| `TextSplitter` | Split large documents |
+| `Embeddings` | Generate vector embeddings |
+
+All of these implement the Runnable interface.
+
+---
+
+# 📚 Lecture 8 — LangChain Runnable Part 2
+
+
+
+
+## 1. Types of Runnables
+
+LangChain divides Runnables into **two categories**.
+
+### A. Task-Specific Runnables
+
+These are the actual LangChain components that perform specific AI tasks.
+
+Examples:
+
+- `PromptTemplate`
+- `ChatOpenAI`
+- `Retriever`
+- `StrOutputParser`
+
+Their job is to perform one dedicated operation.
+
+---
+
+### B. Runnable Primitives
+
+Runnable Primitives help **orchestrate** Task-Specific Runnables.
+
+They define **how** different Runnables execute.
+
+Main primitives:
+
+- RunnableSequence
+- RunnableParallel
+- RunnablePassthrough
+- RunnableLambda
+- RunnableBranch
+
+---
+
+# 2. RunnableSequence
+
+`RunnableSequence` connects multiple Runnables **one after another**.
+
+```text
+Runnable 1
+     ↓
+Runnable 2
+     ↓
+Runnable 3
+```
+
+The output of one Runnable automatically becomes the input of the next.
+
+### Syntax
+
+```python
+from langchain.schema.runnable import RunnableSequence
+
+chain = RunnableSequence(
+    prompt,
+    model,
+    parser
+)
+```
+
+---
+
+### Example
+
+Generate a joke and then explain it.
+
+```text
+Topic
+  ↓
+Generate Joke
+  ↓
+Explain Joke
+  ↓
+Final Output
+```
+
+
+---
+
+# 3. RunnableParallel
+
+`RunnableParallel` executes multiple Runnables **simultaneously**.
+
+```text
+             ┌→ Runnable A
+Input ───────┤
+             └→ Runnable B
+```
+
+### Important Points
+
+- All branches receive the **same input**.
+- Execution happens in parallel.
+- Output is returned as a **dictionary**.
+
+### Syntax
+
+```python
+from langchain.schema.runnable import RunnableParallel
+
+parallel = RunnableParallel({
+    "tweet": tweet_chain,
+    "linkedin": linkedin_chain
+})
+```
+
+---
+
+### Example
+
+Generate both a Tweet and a LinkedIn post.
+
+```text
+             ┌→ Tweet
+Topic ───────┤
+             └→ LinkedIn Post
+```
+
+
+---
+
+# 4. RunnablePassthrough
+
+`RunnablePassthrough` returns the **same input without changing it**.
+
+```text
+Input
+ ↓
+RunnablePassthrough
+ ↓
+Same Output
+```
+
+---
+
+### Why is it useful?
+
+Suppose we generate a joke and also want to preserve the original joke while generating its explanation.
+
+```text
+          ┌→ Passthrough → Joke
+Joke ─────┤
+          └→ Explain Joke
+```
+
+### Code
+
+```python
+parallel = RunnableParallel({
+    "joke": RunnablePassthrough(),
+    "explanation": explain_chain
+})
+```
+
+Output:
+
+```text
+{
+    "joke": "...",
+    "explanation": "..."
+}
+```
+
+---
+
+# 5. RunnableLambda
+
+`RunnableLambda` converts a normal Python function into a Runnable.
+
+### Syntax
+
+```python
+from langchain.schema.runnable import RunnableLambda
+
+runnable = RunnableLambda(function_name)
+```
+
+or
+
+```python
+RunnableLambda(lambda x: ...)
+```
+
+---
+
+### Example: Word Counter
+
+Normal Python function:
+
+```python
+def word_count(text):
+    return len(text.split())
+```
+
+Convert into Runnable:
+
+```python
+counter = RunnableLambda(word_count)
+```
+
+Invoke:
+
+```python
+counter.invoke("I love LangChain")
+```
+
+Output:
+
+```text
+3
+```
+
+---
+
+### Complete Workflow
+
+Generate a joke and count its words.
+
+```text
+              ┌→ Joke
+Generate Joke ┤
+              └→ Word Counter
+```
+
+### Code
+
+```python
+parallel = RunnableParallel({
+    "joke": RunnablePassthrough(),
+    "word_count": RunnableLambda(word_count)
+})
+```
+
+Output:
+
+```text
+{
+    "joke": "...",
+    "word_count": 18
+}
+```
+
+---
+
+# 6. RunnableBranch
+
+`RunnableBranch` performs **conditional execution**.
+
+It behaves like Python's `if-elif-else`.
+
+```text
+Input
+ ↓
+Condition
+ ├── Positive
+ ├── Negative
+ └── Default
+```
+
+### Syntax
+
+```python
+from langchain.schema.runnable import RunnableBranch
+
+branch = RunnableBranch(
+    (condition1, chain1),
+    (condition2, chain2),
+    default_chain
+)
+```
+
+---
+
+### Example
+
+Classify customer emails.
+
+```text
+Customer Email
+      ↓
+Intent Classification
+      ↓
+Condition
+ ├── Complaint
+ ├── Refund
+ └── General Query
+```
+
+Each branch executes a different workflow.
+
+---
+
+# 7. LangChain Expression Language (LCEL)
+
+LCEL is the syntax used to connect Runnables using the **pipe (`|`) operator**.
+
+Instead of writing `RunnableSequence`, we simply write:
+
+```python
+chain = prompt | model | parser
+```
+
+Both are equivalent.
+
+### Flow
+
+```text
+Prompt
+  ↓
+Model
+  ↓
+Parser
+  ↓
+Output
+```
+
+LCEL makes LangChain pipelines cleaner and easier to read.
+
+---
